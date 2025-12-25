@@ -6,6 +6,28 @@ from typing import Sequence
 import numpy as np
 
 
+def has_3dgs_meta(input_ply: str) -> bool:
+    """
+    Detect whether the input PLY contains typical 3DGS meta vertex properties.
+    Returns True if any of {opacity, scale_0..2, f_dc, f_rest} exist.
+    """
+    try:
+        from plyfile import PlyData
+    except ImportError:
+        raise RuntimeError(
+            "plyfile package not installed. Install with: pip install plyfile"
+        )
+
+    plydata = PlyData.read(input_ply)
+    if "vertex" not in plydata:
+        return False
+
+    # Collect vertex property names
+    prop_names = [p.name for p in plydata["vertex"].properties]
+    targets = {"opacity", "scale_0", "scale_1", "scale_2", "f_dc", "f_rest"}
+    return any(t in prop_names for t in targets)
+
+
 def write_filtered_ply(
     input_ply: str, output_ply: str, keep_indices: Sequence[int]
 ) -> None:

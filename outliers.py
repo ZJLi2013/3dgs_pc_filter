@@ -1,6 +1,6 @@
 """
 Advanced Point Cloud Outlier Removal Tool  (3DGS MVP)
-Semantic-aware friendly defaults: prioritize AttributeFilter + conservative SOR
+Semantic-aware defaults: AttributeFilter only (MVP removes density-based filters such as SOR/ROR/voxel)
 """
 
 import argparse
@@ -13,7 +13,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from filters import (
     FilterPipeline,
-    StatisticalOutlierFilter,
     AttributeFilter,
 )
 
@@ -27,8 +26,7 @@ Examples:
   # Attribute-only (no geometry filtering, adaptive opacity threshold ~1% removal)
   python outliers.py -i input.ply -o output.ply --attr
 
-  # Attribute + conservative SOR
-  python outliers.py -i input.ply -o output.ply --attr --sor --sor-neighbors 150 --sor-std 2.5
+  # Note: MVP removes density-based filters (SOR/ROR/voxel). Contrib-based filtering will be introduced later.
         """,
     )
 
@@ -40,15 +38,6 @@ Examples:
 
     # Attribute Filter (3DGS semantics)
     parser.add_argument("--attr", action="store_true", help="Enable attribute filter")
-
-    # Statistical Outlier Filter (geometry-only, conservative defaults)
-    parser.add_argument("--sor", action="store_true", help="Enable SOR filter")
-    parser.add_argument(
-        "--sor-neighbors", type=int, default=150, help="SOR neighbors (default: 150)"
-    )
-    parser.add_argument(
-        "--sor-std", type=float, default=2.5, help="SOR std ratio (default: 2.5)"
-    )
 
     # Output options
     parser.add_argument(
@@ -87,20 +76,11 @@ Examples:
             )
         )
 
-    if args.sor:
-        pipeline.add_filter(
-            StatisticalOutlierFilter(
-                nb_neighbors=args.sor_neighbors,
-                std_ratio=args.sor_std,
-                enabled=True,
-            )
-        )
-
     # Check if any filters are enabled
     if len(pipeline.filters) == 0:
         print("\nError: No filters enabled!")
         print(
-            "Enable specific filters (--attr, --sor) to apply changes; by default no geometry filtering is performed."
+            "Enable specific filters (--attr) to apply changes; MVP removes density-based filters (SOR, ROR, voxel)."
         )
         sys.exit(1)
 
@@ -113,33 +93,44 @@ Examples:
     # Print summary
     print(pipeline.get_summary(stats_list))
 
-    # Save result (preserve 3DGS vertex attributes if metadata exists)
+    # Save result (default: preserve original 3DGS meta if present)
     print(f"\nSaving cleaned point cloud to: {args.output}")
-    if metadata is not None:
-        try:
-            from ply_utils import write_filtered_ply
-
+    try:
+        from ply_utils import write_filtered_ply, has_3dgs_meta
+    except Exception as e:
+        # If ply_utils import fails, fall back to Open3D (attributes may be lost)
+        print(
+            f"Warning: ply_utils import failed ({e}); falling back to Open3D (attributes may be lost)."
+        )
+        o3d.io.write_point_cloud(args.output, filtered_pcd)
+        print("Saved with Open3D (no 3DGS meta preserved).")
+    else:
+        if has_3dgs_meta(args.input):
             if (
                 hasattr(pipeline, "final_keep_indices")
                 and pipeline.final_keep_indices is not None
             ):
-                write_filtered_ply(args.input, args.output, pipeline.final_keep_indices)
-                print("Saved with plyfile (preserved 3DGS attributes).")
+                try:
+                    write_filtered_ply(
+                        args.input, args.output, pipeline.final_keep_indices
+                    )
+                    print("Saved with plyfile (preserved 3DGS attributes).")
+                except Exception as e:
+                    print(
+                        f"Warning: plyfile save failed ({e}); falling back to Open3D (attributes may be lost)."
+                    )
+                    o3d.io.write_point_cloud(args.output, filtered_pcd)
+                    print("Saved with Open3D (attributes may be lost).")
             else:
-                # Fallback if indices not available
-                o3d.io.write_point_cloud(args.output, filtered_pcd)
+                # Strong warning: indices missing prevents meta-preserving write
                 print(
-                    "Warning: final indices not available; saved with Open3D (attributes may be lost)."
+                    "Warning: final_keep_indices not available; saved with Open3D (3DGS attributes will be lost)."
                 )
-        except Exception as e:
-            print(
-                f"Warning: plyfile save failed ({e}); falling back to Open3D (attributes may be lost)."
-            )
+                o3d.io.write_point_cloud(args.output, filtered_pcd)
+        else:
+            # No 3DGS meta: safe to use Open3D
             o3d.io.write_point_cloud(args.output, filtered_pcd)
-    else:
-        # No metadata: safe to use Open3D
-        o3d.io.write_point_cloud(args.output, filtered_pcd)
-        print("Saved with Open3D.")
+            print("Saved with Open3D.")
     print("Done!")
 
     # Visualize if requested
