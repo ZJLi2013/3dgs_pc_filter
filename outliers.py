@@ -25,8 +25,6 @@ def main():
 Examples:
   # Attribute-only (no geometry filtering; delete only explicit zero opacity)
   python outliers.py -i input.ply -o output.ply
-
-  # Note: MVP removes density-based filters (SOR/ROR/voxel). Contrib-based filtering will be introduced later.
         """,
     )
 

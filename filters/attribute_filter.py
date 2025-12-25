@@ -68,27 +68,25 @@ class AttributeFilter(FilterBase):
         num_points = len(pcd.points)
         keep_mask = np.ones(num_points, dtype=bool)
 
-        # Filter by opacity (adaptive if threshold is None)
-        if "opacity" in metadata:
-            opacity = np.asarray(metadata["opacity"], dtype=float)
-            # Clip to [0,1] and remove invalids from threshold computation
-            opacity = np.clip(opacity, 0.0, 1.0)
-            valid_mask = np.isfinite(opacity)
-            valid_opacity = opacity[valid_mask]
+        # Filter by alpha (sigmoid-activated opacity)
+        if "alpha" in metadata:
+            alpha = np.asarray(metadata["alpha"], dtype=float)
+            valid_mask = np.isfinite(alpha)
+            valid_alpha = alpha[valid_mask]
 
             # Print distribution stats (for debugging/inspection)
-            nz = np.count_nonzero(valid_opacity)
-            nonzero_ratio = nz / valid_opacity.size if valid_opacity.size > 0 else 0.0
+            nz = np.count_nonzero(valid_alpha)
+            nonzero_ratio = nz / valid_alpha.size if valid_alpha.size > 0 else 0.0
 
             def _pct(arr, p):
                 return float(np.percentile(arr, p)) if arr.size > 0 else 0.0
 
             print(
-                f"  Opacity stats: "
-                f"min={float(valid_opacity.min()) if valid_opacity.size>0 else 0.0:.6f}, "
-                f"median={float(np.median(valid_opacity)) if valid_opacity.size>0 else 0.0:.6f}, "
-                f"p95={_pct(valid_opacity,95):.6f}, p99={_pct(valid_opacity,99):.6f}, "
-                f"mean={float(valid_opacity.mean()) if valid_opacity.size>0 else 0.0:.6f}, "
+                f"  Alpha stats: "
+                f"min={float(valid_alpha.min()) if valid_alpha.size>0 else 0.0:.6f}, "
+                f"median={float(np.median(valid_alpha)) if valid_alpha.size>0 else 0.0:.6f}, "
+                f"p95={_pct(valid_alpha,95):.6f}, p99={_pct(valid_alpha,99):.6f}, "
+                f"mean={float(valid_alpha.mean()) if valid_alpha.size>0 else 0.0:.6f}, "
                 f"nonzero_ratio={nonzero_ratio:.4f}"
             )
 
@@ -96,13 +94,13 @@ class AttributeFilter(FilterBase):
             if threshold is None:
                 # MVP: explicit-zero removal only (no adaptive/percentile)
                 threshold = 1e-8
-                print(f"  Opacity zero-removal epsilon: {threshold:.1e}")
+                print(f"  Alpha zero-removal epsilon: {threshold:.1e}")
 
-            # Keep points with opacity strictly greater than epsilon
-            opacity_mask = opacity > threshold
-            keep_mask &= opacity_mask
-            removed_by_opacity = int((~opacity_mask).sum())
-            print(f"  Opacity filter: removed {removed_by_opacity:,} points")
+            # Keep points with alpha strictly greater than epsilon
+            alpha_mask = alpha > threshold
+            keep_mask &= alpha_mask
+            removed_by_alpha = int((~alpha_mask).sum())
+            print(f"  Alpha filter: removed {removed_by_alpha:,} points")
 
         # Filter by scale (only if percentiles explicitly provided)
         if (
@@ -169,11 +167,14 @@ class AttributeFilter(FilterBase):
 
             metadata = {}
 
-            # Try to extract opacity
-            if "opacity" in vertex:
-                metadata["opacity"] = np.array(vertex["opacity"])
-            elif "alpha" in vertex:
-                metadata["opacity"] = np.array(vertex["alpha"])
+            # Try to extract alpha (sigmoid-activated opacity)
+            if "alpha" in vertex:
+                metadata["alpha"] = np.array(vertex["alpha"])
+            elif "opacity" in vertex:
+                # Treat opacity as logit; convert to alpha via sigmoid
+                op = np.array(vertex["opacity"], dtype=float)
+                metadata["alpha"] = 1.0 / (1.0 + np.exp(-op))
+                metadata["opacity"] = op  # keep raw for debugging
 
             # Try to extract scale
             scale_names = ["scale_0", "scale_1", "scale_2"]
