@@ -89,12 +89,26 @@ class AttributeFilter(FilterBase):
                 f"mean={float(valid_alpha.mean()) if valid_alpha.size>0 else 0.0:.6f}, "
                 f"nonzero_ratio={nonzero_ratio:.4f}"
             )
+            exact_zero_count = int(np.sum(alpha == 0))
+            print(f"  Alpha exact-zero count: {exact_zero_count}")
 
             threshold = self.opacity_threshold
             if threshold is None:
-                # MVP: explicit-zero removal only (no adaptive/percentile)
-                threshold = 1e-8
-                print(f"  Alpha zero-removal epsilon: {threshold:.1e}")
+                # MVP: percentile-based near-zero removal (auto)
+                p = 0.5  # percentile (0.5%)
+                if valid_alpha.size > 0:
+                    threshold = float(np.percentile(valid_alpha, p))
+                else:
+                    threshold = 0.0
+                print(f"  Alpha percentile epsilon (p={p}%): {threshold:.6f}")
+                pred_ratio = (
+                    (valid_alpha <= threshold).sum() / valid_alpha.size
+                    if valid_alpha.size > 0
+                    else 0.0
+                )
+                print(
+                    f"  Alpha expected removal ≈ {pred_ratio*100:.2f}% (by percentile)"
+                )
 
             # Keep points with alpha strictly greater than epsilon
             alpha_mask = alpha > threshold
