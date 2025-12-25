@@ -23,8 +23,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Attribute-only (no geometry filtering, adaptive opacity threshold ~1% removal)
-  python outliers.py -i input.ply -o output.ply --attr
+  # Attribute-only (no geometry filtering; delete only explicit zero opacity)
+  python outliers.py -i input.ply -o output.ply
 
   # Note: MVP removes density-based filters (SOR/ROR/voxel). Contrib-based filtering will be introduced later.
         """,
@@ -33,13 +33,6 @@ Examples:
     # Input/Output
     parser.add_argument("--input", "-i", required=True, help="Input point cloud file")
     parser.add_argument("--output", "-o", required=True, help="Output point cloud file")
-
-    # Preset mode (MVP-focused)
-
-    # Attribute Filter (3DGS semantics)
-    parser.add_argument("--attr", action="store_true", help="Enable attribute filter")
-
-    # Output options
     parser.add_argument(
         "--visualize", "-v", action="store_true", help="Visualize final result"
     )
@@ -54,35 +47,23 @@ Examples:
 
     # Load 3DGS metadata when AttributeFilter is requested
     metadata = None
-    need_attr = args.attr
-    if need_attr:
-        print("\nAttempting to load 3DGS metadata...")
-        metadata = AttributeFilter.load_3dgs_metadata(args.input)
-        if metadata:
-            print(f"Loaded metadata with keys: {list(metadata.keys())}")
-        else:
-            print(
-                "Warning: Could not load 3DGS metadata, AttributeFilter will be skipped"
-            )
+    print("\nAttempting to load 3DGS metadata...")
+    metadata = AttributeFilter.load_3dgs_metadata(args.input)
+    if metadata:
+        print(f"Loaded metadata with keys: {list(metadata.keys())}")
+    else:
+        print(
+            "Warning: Could not load 3DGS metadata; AttributeFilter requires 3DGS fields (opacity/scale/SH)."
+        )
 
     # Build pipeline
     pipeline = FilterPipeline(name="Conservative Pipeline")
-
-    # Build filters based on flags (conservative by default)
-    if args.attr and metadata:
+    if metadata:
         pipeline.add_filter(
             AttributeFilter(
                 enabled=True,
             )
         )
-
-    # Check if any filters are enabled
-    if len(pipeline.filters) == 0:
-        print("\nError: No filters enabled!")
-        print(
-            "Enable specific filters (--attr) to apply changes; MVP removes density-based filters (SOR, ROR, voxel)."
-        )
-        sys.exit(1)
 
     # Run pipeline
     filtered_pcd, stats_list = pipeline.run(

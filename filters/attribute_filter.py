@@ -76,28 +76,33 @@ class AttributeFilter(FilterBase):
             valid_mask = np.isfinite(opacity)
             valid_opacity = opacity[valid_mask]
 
-            threshold = self.opacity_threshold
-            if threshold is None and valid_opacity.size > 0:
-                # Target ~1% removal; if non-zero fraction is tiny, target 0.5%
-                nonzero_ratio = (valid_opacity > 0).sum() / valid_opacity.size
-                target_ratio = 0.01 if nonzero_ratio >= 0.05 else 0.005
-                try:
-                    q = float(np.quantile(valid_opacity, target_ratio))
-                except Exception:
-                    q = 0.0
-                threshold = max(1e-4, q)
-                print(
-                    f"  Adaptive opacity threshold: {threshold:.6f} "
-                    f"(target removal ratio: {int(target_ratio*100)}%)"
-                )
+            # Print distribution stats (for debugging/inspection)
+            nz = np.count_nonzero(valid_opacity)
+            nonzero_ratio = nz / valid_opacity.size if valid_opacity.size > 0 else 0.0
 
-            if threshold is not None:
-                opacity_mask = opacity >= threshold
-                keep_mask &= opacity_mask
-                removed_by_opacity = int((~opacity_mask).sum())
-                print(f"  Opacity filter: removed {removed_by_opacity:,} points")
-            else:
-                print("  Opacity filter: skipped (no valid opacity or threshold)")
+            def _pct(arr, p):
+                return float(np.percentile(arr, p)) if arr.size > 0 else 0.0
+
+            print(
+                f"  Opacity stats: "
+                f"min={float(valid_opacity.min()) if valid_opacity.size>0 else 0.0:.6f}, "
+                f"median={float(np.median(valid_opacity)) if valid_opacity.size>0 else 0.0:.6f}, "
+                f"p95={_pct(valid_opacity,95):.6f}, p99={_pct(valid_opacity,99):.6f}, "
+                f"mean={float(valid_opacity.mean()) if valid_opacity.size>0 else 0.0:.6f}, "
+                f"nonzero_ratio={nonzero_ratio:.4f}"
+            )
+
+            threshold = self.opacity_threshold
+            if threshold is None:
+                # MVP: explicit-zero removal only (no adaptive/percentile)
+                threshold = 1e-8
+                print(f"  Opacity zero-removal epsilon: {threshold:.1e}")
+
+            # Keep points with opacity strictly greater than epsilon
+            opacity_mask = opacity > threshold
+            keep_mask &= opacity_mask
+            removed_by_opacity = int((~opacity_mask).sum())
+            print(f"  Opacity filter: removed {removed_by_opacity:,} points")
 
         # Filter by scale (only if percentiles explicitly provided)
         if (

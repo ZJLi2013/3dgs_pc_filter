@@ -15,13 +15,15 @@ pip install open3d numpy
 # 3DGS属性读取（必需）
 pip install plyfile
 
-# Attribute-only (no geometry filtering, adaptive opacity threshold ~1% removal)
-python outliers.py -i input.ply -o output.ply --attr
+# Attribute-only (no geometry filtering; delete only explicit zero opacity)
+python outliers.py -i input.ply -o output.ply
+
+python3 3dgs_pc_filter/outliers.py  -i output_gs/gs_ply/0000.ply  -o output_gs/gs_ply/clean.ply 
 
 ```
 
 注意事项：
-- 优先启用 `--attr`，保护高不透明度/合理尺度/高SH能量点
+- AttributeFilter 默认启用（无需参数），在输入 PLY 包含 3DGS 元属性时生效；若 PLY 缺少 opacity/scale/SH，将跳过过滤并提示。
 - MVP 不提供 SOR/ROR/Cluster/ROI/voxel 等几何类入口，避免误删语义结构；默认仅支持语义过滤（AttributeFilter），后续将加入“基于贡献度”的去重。
 - 输出写出：若检测到 3DGS 元数据（opacity/scale/SH），工具默认使用 `ply_utils.write_filtered_ply` 写出，保留所有 vertex 属性；Open3D 的 `o3d.io.write_point_cloud` 仅支持标准字段（如 x,y,z,colors,normals），会丢失 3DGS 的自定义属性，不用于有语义元数据的场景
 
