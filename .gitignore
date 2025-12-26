@@ -1,0 +1,6 @@
+# === Data files ===
+*.npy
+*.ply
+*.pcd
+# === 临时 & 缓存 ===
+__pycache__/
