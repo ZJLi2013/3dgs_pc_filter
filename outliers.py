@@ -76,6 +76,11 @@ Examples:
         default="*.npy",
         help="Glob pattern to select depth files in --depth-dir (e.g., '*rel*.npy' or '*metric*.npy')",
     )
+    parser.add_argument(
+        "--remove-if-few-views",
+        action="store_true",
+        help="Remove points with too few valid views contributing to consistency (default: disabled)",
+    )
 
     args = parser.parse_args()
 
@@ -175,6 +180,7 @@ Examples:
                     fit_subset_points=args.fit_subset_points,
                     fit_min_samples=args.fit_min_samples,
                     sigma_b=args.sigma_b,
+                    remove_if_few_views=args.remove_if_few_views,
                     sampling=args.sampling,
                 )
             )
